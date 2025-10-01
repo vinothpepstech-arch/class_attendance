@@ -20,58 +20,23 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
-        ChangeNotifierProvider(create: (_) => ThemeProvider()),
-      ],
-      child: Consumer<ThemeProvider>(
-        builder: (context, themeProvider, child) {
+    return ChangeNotifierProvider(
+      create: (_) => AuthProvider(),
+      child: Consumer<AuthProvider>(
+        builder: (context, auth, _) {
           return MaterialApp(
-            title: 'College Automation App',
+            title: 'School Management',
             theme: AppTheme.lightTheme,
-            darkTheme: AppTheme.darkTheme,
-            themeMode: themeProvider.themeMode,
-            home: const AuthHandler(),
+            home: auth.isLoading
+                ? const SplashScreen()
+                : auth.user == null
+                    ? const LoginScreen()
+                    : auth.role == 'student'
+                        ? const StudentScreen()
+                        : const AdminTeacherScreen(),
           );
         },
       ),
     );
-  }
-}
-
-class AuthHandler extends StatelessWidget {
-  const AuthHandler({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<AuthProvider>(
-      builder: (context, auth, child) {
-        if (auth.isLoading) {
-          return const SplashScreen();
-        }
-
-        if (auth.user == null) {
-          return const LoginScreen();
-        }
-
-        if (auth.role == 'student') {
-          return const StudentScreen();
-        } else {
-          return const AdminTeacherScreen();
-        }
-      },
-    );
-  }
-}
-
-class ThemeProvider with ChangeNotifier {
-  ThemeMode _themeMode = ThemeMode.system;
-
-  ThemeMode get themeMode => _themeMode;
-
-  void toggleTheme() {
-    _themeMode = _themeMode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
-    notifyListeners();
   }
 }
