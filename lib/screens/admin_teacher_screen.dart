@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:myapp/screens/login_screen.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/supabase_service.dart';
-import 'student_login_screen.dart';
+import '../theme.dart';
+import 'login_screen.dart';
 
 class AdminTeacherScreen extends StatefulWidget {
   const AdminTeacherScreen({super.key});
@@ -18,29 +18,19 @@ class _AdminTeacherScreenState extends State<AdminTeacherScreen> {
   Future<void> _showLogoutConfirmationDialog() async {
     return showDialog<void>(
       context: context,
-      barrierDismissible: false, // user must tap button!
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('Logout'),
-          content: const SingleChildScrollView(
-            child: ListBody(
-              children: <Widget>[
-                Text('Are you sure you want to logout?'),
-              ],
-            ),
-          ),
+          content: const Text('Are you sure you want to logout?'),
           actions: <Widget>[
             TextButton(
               child: const Text('Cancel'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
+              onPressed: () => Navigator.of(context).pop(),
             ),
             TextButton(
               child: const Text('Logout'),
               onPressed: () {
                 Provider.of<AuthProvider>(context, listen: false).logout();
-                Navigator.of(context).pop(); // Close the dialog
                 Navigator.of(context).pushAndRemoveUntil(
                   MaterialPageRoute(builder: (context) => const LoginScreen()),
                   (Route<dynamic> route) => false,
@@ -55,10 +45,19 @@ class _AdminTeacherScreenState extends State<AdminTeacherScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDarkMode = themeProvider.themeMode == ThemeMode.dark;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Admin/Teacher Dashboard'),
+        title: const Text('Admin Dashboard'),
         actions: [
+          IconButton(
+            icon: Icon(isDarkMode ? Icons.light_mode : Icons.dark_mode),
+            onPressed: () {
+              themeProvider.toggleTheme(!isDarkMode);
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: _showLogoutConfirmationDialog,
@@ -75,11 +74,11 @@ class _AdminTeacherScreenState extends State<AdminTeacherScreen> {
       bottomNavigationBar: BottomNavigationBar(
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.check_circle),
+            icon: Icon(Icons.check_circle_outline),
             label: 'Attendance',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.announcement),
+            icon: Icon(Icons.announcement_outlined),
             label: 'Announcements',
           ),
         ],
@@ -101,12 +100,21 @@ class AttendanceManagementScreen extends StatefulWidget {
 class _AttendanceManagementScreenState
     extends State<AttendanceManagementScreen> {
   List<Map<String, dynamic>> _studentsData = [];
+  List<Map<String, dynamic>> _filteredStudentsData = [];
   bool _isLoading = true;
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _loadStudentData();
+    _searchController.addListener(_filterStudents);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadStudentData() async {
@@ -114,50 +122,43 @@ class _AttendanceManagementScreenState
     setState(() => _isLoading = true);
 
     try {
-      final studentsRes = await SupabaseService.client
-          .from('profiles')
-          .select('id, full_name')
-          .eq('role', 'student');
+      final studentLogins = await SupabaseService.client
+          .from('student_login')
+          .select();
 
-      final studentIds = studentsRes.map((s) => s['id'] as String).toList();
-      final today = DateTime.now().toIso8601String().split('T').first;
-
-      final attendanceRes = await SupabaseService.client
-          .from('attendance')
-          .select('student_id, status, reason')
-          .inFilter('student_id', studentIds)
-          .eq('date', today);
-
-      final attendanceMap = {
-        for (var record in attendanceRes)
-          record['student_id']: {
-            'status': record['status'],
-            'reason': record['reason']
-          }
-      };
-
-      final combinedData = studentsRes.map((student) {
-        final attendance = attendanceMap[student['id']];
+      final combinedData = (studentLogins as List).map((student) {
         return {
           'id': student['id'],
-          'full_name': student['full_name'],
-          'status': attendance?['status'],
-          'reason': attendance?['reason'],
+          'full_name': student['name'],
+          'status': student['status'] ? 'present' : 'absent',
+          'reason': student['reason'],
         };
       }).toList();
 
-      if (!mounted) return;
-      setState(() {
-        _studentsData = combinedData;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _studentsData = combinedData;
+          _filteredStudentsData = combinedData;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading data: $e')),
-      );
-      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading data: $e')),
+        );
+        setState(() => _isLoading = false);
+      }
     }
+  }
+
+  void _filterStudents() {
+    final query = _searchController.text.toLowerCase();
+    setState(() {
+      _filteredStudentsData = _studentsData.where((student) {
+        return student['full_name'].toLowerCase().contains(query);
+      }).toList();
+    });
   }
 
   void _showReasonDialog(String? reason) {
@@ -178,116 +179,98 @@ class _AttendanceManagementScreenState
     );
   }
 
-  void _updateAttendance(String studentId, String status) async {
-    try {
-      await SupabaseService.client.from('attendance').upsert({
-        'student_id': studentId,
-        'date': DateTime.now().toIso8601String().split('T')[0],
-        'status': status,
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Attendance updated to ${status.toUpperCase()}')),
-      );
-      _loadStudentData(); // Refresh data
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error updating attendance: $e')),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final presentCount = _studentsData.where((s) => s['status'] == 'present').length;
     final absentCount = _studentsData.where((s) => s['status'] == 'absent').length;
+    final totalStudents = _studentsData.length;
 
     return _isLoading
         ? const Center(child: CircularProgressIndicator())
         : RefreshIndicator(
             onRefresh: _loadStudentData,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Card(
-                    elevation: 4,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Card(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
-                          Column(
-                            children: [
-                              Text('Present', style: Theme.of(context).textTheme.titleLarge),
-                              const SizedBox(height: 8),
-                              Text('$presentCount', style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: Colors.green)),
-                            ],
-                          ),
-                          Column(
-                            children: [
-                              Text('Absent', style: Theme.of(context).textTheme.titleLarge),
-                              const SizedBox(height: 8),
-                              Text('$absentCount', style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: Colors.red)),
-                            ],
-                          ),
+                          _buildStat('Present', presentCount.toString(), Colors.green),
+                          _buildStat('Absent', absentCount.toString(), Colors.red),
+                          _buildStat('Total', totalStudents.toString(), Theme.of(context).primaryColor),
                         ],
                       ),
                     ),
                   ),
-                ),
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: _studentsData.length,
-                    itemBuilder: (context, index) {
-                      final student = _studentsData[index];
-                      final status = student['status'] as String?;
-                      final reason = student['reason'] as String?;
-
-                      IconData statusIcon;
-                      Color statusColor;
-                      String statusText;
-
-                      switch (status) {
-                        case 'present':
-                          statusIcon = Icons.check_circle;
-                          statusColor = Colors.green;
-                          statusText = 'Present';
-                          break;
-                        case 'absent':
-                          statusIcon = Icons.cancel;
-                          statusColor = Colors.red;
-                          statusText = 'Absent';
-                          break;
-                        default:
-                          statusIcon = Icons.help_outline;
-                          statusColor = Colors.grey;
-                          statusText = 'Not Marked';
-                      }
-
-                      return Card(
-                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        child: ListTile(
-                          leading: Icon(statusIcon, color: statusColor),
-                          title: Text(student['full_name']),
-                          subtitle: Text(statusText),
-                          onTap: status == 'absent' ? () => _showReasonDialog(reason) : null,
-                          trailing: PopupMenuButton<String>(
-                            onSelected: (newStatus) => _updateAttendance(student['id'], newStatus),
-                            itemBuilder: (context) => [
-                              const PopupMenuItem(value: 'present', child: Text('Mark Present')),
-                              const PopupMenuItem(value: 'absent', child: Text('Mark Absent')),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _searchController,
+                    decoration: const InputDecoration(
+                      labelText: 'Search Students',
+                      prefixIcon: Icon(Icons.search),
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  Card(
+                    child: DataTable(
+                      columns: const [
+                        DataColumn(label: Text('Name')),
+                        DataColumn(label: Text('Status')),
+                        DataColumn(label: Text('Reason')),
+                      ],
+                      rows: _filteredStudentsData.map((student) {
+                        final status = student['status'] as String?;
+                        final reason = student['reason'] as String?;
+                        return DataRow(
+                          cells: [
+                            DataCell(Text(student['full_name'])),
+                            DataCell(
+                              Text(
+                                status ?? 'Not Marked',
+                                style: TextStyle(
+                                  color: status == 'present' ? Colors.green : (status == 'absent' ? Colors.red : null),
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              IconButton(
+                                icon: const Icon(Icons.info_outline),
+                                onPressed: status == 'absent' ? () => _showReasonDialog(reason) : null,
+                              ),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              ),
             ),
           );
   }
+
+  Widget _buildStat(String title, String value, Color color) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+        ),
+        const SizedBox(height: 4),
+        Text(title),
+      ],
+    );
+  }
 }
+
 class AnnouncementScreen extends StatefulWidget {
   const AnnouncementScreen({super.key});
 
@@ -296,26 +279,28 @@ class AnnouncementScreen extends StatefulWidget {
 }
 
 class _AnnouncementScreenState extends State<AnnouncementScreen> {
-  final List<String> _options = ['Assemble', 'Dismissal', 'Emergency', 'Event', 'Holiday'];
-  String? _selectedOption;
+  final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
+  String? _selectedOption;
+  final List<String> _options = ['Assemble', 'Dismissal', 'Emergency', 'Event', 'Holiday'];
 
   Future<void> _postAnnouncement() async {
-    if (_selectedOption == null) return;
+    if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
     try {
-      await SupabaseService.client.from('announcements').insert({
-        'title': _selectedOption,
-        'content': 'This is an announcement for ${_selectedOption!.toLowerCase()}.',
+      await SupabaseService.client.from('play_queue').insert({
+        'audio_file': '${_selectedOption!.toLowerCase()}.mp3',
       });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Announcement posted successfully!')),
         );
-        setState(() => _selectedOption = null);
+        setState(() {
+          _selectedOption = null;
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -338,37 +323,43 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Post an Announcement',
-                  style: Theme.of(context).textTheme.titleLarge,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                Wrap(
-                  spacing: 8.0,
-                  runSpacing: 8.0,
-                  alignment: WrapAlignment.center,
-                  children: _options.map((option) {
-                    return ChoiceChip(
-                      label: Text(option),
-                      selected: _selectedOption == option,
-                      onSelected: (selected) {
-                        setState(() => _selectedOption = selected ? option : null);
-                      },
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 24),
-                _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : ElevatedButton(
-                        onPressed: _selectedOption != null ? _postAnnouncement : null,
-                        child: const Text('Post Announcement'),
-                      ),
-              ],
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Post an Announcement',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+                  DropdownButtonFormField<String>(
+                    value: _selectedOption,
+                    hint: const Text('Select Category'),
+                    items: _options.map((String option) {
+                      return DropdownMenuItem<String>(
+                        value: option,
+                        child: Text(option),
+                      );
+                    }).toList(),
+                    onChanged: (newValue) {
+                      setState(() {
+                        _selectedOption = newValue;
+                      });
+                    },
+                    validator: (value) => value == null ? 'Please select a category' : null,
+                  ),
+                  const SizedBox(height: 24),
+                  _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : ElevatedButton.icon(
+                          onPressed: _postAnnouncement,
+                          icon: const Icon(Icons.send),
+                          label: const Text('Post Announcement'),
+                        ),
+                ],
+              ),
             ),
           ),
         ),

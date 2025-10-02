@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import './providers/auth_provider.dart';
 import './screens/login_screen.dart';
 import './screens/splash_screen.dart';
@@ -20,20 +19,33 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => AuthProvider(),
-      child: Consumer<AuthProvider>(
-        builder: (context, auth, _) {
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+      ],
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, _) {
           return MaterialApp(
+            debugShowCheckedModeBanner: false,
             title: 'School Management',
             theme: AppTheme.lightTheme,
-            home: auth.isLoading
-                ? const SplashScreen()
-                : auth.user == null
-                    ? const LoginScreen()
-                    : auth.role == 'student'
-                        ? const StudentScreen()
-                        : const AdminTeacherScreen(),
+            darkTheme: AppTheme.darkTheme,
+            themeMode: themeProvider.themeMode,
+            home: Consumer<AuthProvider>(
+              builder: (context, auth, _) {
+                if (auth.isLoading) {
+                  return const SplashScreen();
+                }
+                if (auth.user == null) {
+                  return const LoginScreen();
+                }
+                if (auth.role == 'student') {
+                  return const StudentScreen();
+                }
+                return const AdminTeacherScreen();
+              },
+            ),
           );
         },
       ),
