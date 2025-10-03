@@ -74,14 +74,33 @@ class _StudentScreenState extends State<StudentScreen> {
           .single();
       final studentName = profileRes['full_name'];
 
-      await SupabaseService.client
+      final today = DateTime.now();
+      final startOfDay = DateTime(today.year, today.month, today.day);
+      final endOfDay = startOfDay.add(const Duration(days: 1));
+
+      final existingRecords = await SupabaseService.client
           .from('student_login')
-          .update({
-            'status': _isPresent,
-            'reason': _isPresent ? null : _absenceReason,
-            'last_updated': DateTime.now().toIso8601String(),
-          })
-          .eq('name', studentName);
+          .select('id')
+          .eq('name', studentName)
+          .gte('last_updated', startOfDay.toIso8601String())
+          .lt('last_updated', endOfDay.toIso8601String());
+
+      if (existingRecords.isNotEmpty) {
+        // Update existing record
+        final recordToUpdate = existingRecords.first;
+        await SupabaseService.client.from('student_login').update({
+          'status': _isPresent,
+          'reason': _isPresent ? null : _absenceReason,
+          'last_updated': DateTime.now().toIso8601String(),
+        }).eq('id', recordToUpdate['id']);
+      } else {
+        // Insert new record
+        await SupabaseService.client.from('student_login').insert({
+          'name': studentName,
+          'status': _isPresent,
+          'reason': _isPresent ? null : _absenceReason,
+        });
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
