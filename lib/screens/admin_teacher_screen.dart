@@ -66,10 +66,7 @@ class _AdminTeacherScreenState extends State<AdminTeacherScreen> {
       ),
       body: IndexedStack(
         index: _selectedIndex,
-        children: const [
-          AttendanceManagementScreen(),
-          AnnouncementScreen(),
-        ],
+        children: const [AttendanceManagementScreen(), AnnouncementScreen()],
       ),
       bottomNavigationBar: BottomNavigationBar(
         items: const [
@@ -144,9 +141,9 @@ class _AttendanceManagementScreenState
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading data: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading data: $e')));
         setState(() => _isLoading = false);
       }
     }
@@ -181,8 +178,12 @@ class _AttendanceManagementScreenState
 
   @override
   Widget build(BuildContext context) {
-    final presentCount = _studentsData.where((s) => s['status'] == 'present').length;
-    final absentCount = _studentsData.where((s) => s['status'] == 'absent').length;
+    final presentCount = _studentsData
+        .where((s) => s['status'] == 'present')
+        .length;
+    final absentCount = _studentsData
+        .where((s) => s['status'] == 'absent')
+        .length;
     final totalStudents = _studentsData.length;
 
     return _isLoading
@@ -200,9 +201,21 @@ class _AttendanceManagementScreenState
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
-                          _buildStat('Present', presentCount.toString(), Colors.green),
-                          _buildStat('Absent', absentCount.toString(), Colors.red),
-                          _buildStat('Total', totalStudents.toString(), Theme.of(context).primaryColor),
+                          _buildStat(
+                            'Present',
+                            presentCount.toString(),
+                            Colors.green,
+                          ),
+                          _buildStat(
+                            'Absent',
+                            absentCount.toString(),
+                            Colors.red,
+                          ),
+                          _buildStat(
+                            'Total',
+                            totalStudents.toString(),
+                            Theme.of(context).primaryColor,
+                          ),
                         ],
                       ),
                     ),
@@ -233,14 +246,20 @@ class _AttendanceManagementScreenState
                               Text(
                                 status ?? 'Not Marked',
                                 style: TextStyle(
-                                  color: status == 'present' ? Colors.green : (status == 'absent' ? Colors.red : null),
+                                  color: status == 'present'
+                                      ? Colors.green
+                                      : (status == 'absent'
+                                            ? Colors.red
+                                            : null),
                                 ),
                               ),
                             ),
                             DataCell(
                               IconButton(
                                 icon: const Icon(Icons.info_outline),
-                                onPressed: status == 'absent' ? () => _showReasonDialog(reason) : null,
+                                onPressed: status == 'absent'
+                                    ? () => _showReasonDialog(reason)
+                                    : null,
                               ),
                             ),
                           ],
@@ -260,9 +279,9 @@ class _AttendanceManagementScreenState
         Text(
           value,
           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
         ),
         const SizedBox(height: 4),
         Text(title),
@@ -282,7 +301,13 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   String? _selectedOption;
-  final List<String> _options = ['Assemble', 'Dismissal', 'Emergency', 'Event', 'Holiday'];
+  final List<String> _options = [
+    'Assemble',
+    'cs_today',
+    'googleform',
+    'pmss',
+    'retest',
+  ];
 
   Future<void> _postAnnouncement() async {
     if (!_formKey.currentState!.validate()) return;
@@ -304,9 +329,9 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
       }
     } finally {
       if (mounted) {
@@ -330,7 +355,9 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                 children: [
                   Text(
                     'Post an Announcement',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 24),
@@ -348,7 +375,8 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                         _selectedOption = newValue;
                       });
                     },
-                    validator: (value) => value == null ? 'Please select a category' : null,
+                    validator: (value) =>
+                        value == null ? 'Please select a category' : null,
                   ),
                   const SizedBox(height: 24),
                   _isLoading
