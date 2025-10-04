@@ -1,6 +1,6 @@
 {
-    "name": "myapp",
-    "short_name": "myapp",
+    "name": "Attendance_PT",
+    "short_name": "Attendance_PT",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
