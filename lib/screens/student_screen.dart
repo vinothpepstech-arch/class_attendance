@@ -12,11 +12,9 @@ class StudentScreen extends StatefulWidget {
 }
 
 class _StudentScreenState extends State<StudentScreen> {
-  bool _isPresent = true;
   String _absenceReason = '';
   bool _isLoading = false;
   String? _studentName;
-  List<Map<String, dynamic>> _announcements = [];
 
   @override
   void initState() {
@@ -26,7 +24,6 @@ class _StudentScreenState extends State<StudentScreen> {
 
   Future<void> _loadStudentData() async {
     await _loadStudentName();
-    await _loadAnnouncements();
   }
 
   Future<void> _loadStudentName() async {
@@ -45,24 +42,14 @@ class _StudentScreenState extends State<StudentScreen> {
     }
   }
 
-  Future<void> _loadAnnouncements() async {
-    try {
-      final response = await SupabaseService.client
-          .from('announcements')
-          .select()
-          .order('created_at', ascending: false)
-          .limit(5);
-      if (mounted) {
-        setState(() {
-          _announcements = List<Map<String, dynamic>>.from(response);
-        });
-      }
-    } catch (e) {
-      // Handle error
-    }
-  }
-
   Future<void> _submitAttendance() async {
+    if (_absenceReason.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please provide a reason for your absence.')),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
     final user = Provider.of<AuthProvider>(context, listen: false).user;
 
@@ -74,37 +61,16 @@ class _StudentScreenState extends State<StudentScreen> {
           .single();
       final studentName = profileRes['full_name'];
 
-      final today = DateTime.now();
-      final startOfDay = DateTime(today.year, today.month, today.day);
-      final endOfDay = startOfDay.add(const Duration(days: 1));
-
-      final existingRecords = await SupabaseService.client
-          .from('student_login')
-          .select('id')
-          .eq('name', studentName)
-          .gte('last_updated', startOfDay.toIso8601String())
-          .lt('last_updated', endOfDay.toIso8601String());
-
-      if (existingRecords.isNotEmpty) {
-        // Update existing record
-        final recordToUpdate = existingRecords.first;
-        await SupabaseService.client.from('student_login').update({
-          'status': _isPresent,
-          'reason': _isPresent ? null : _absenceReason,
-          'last_updated': DateTime.now().toIso8601String(),
-        }).eq('id', recordToUpdate['id']);
-      } else {
-        // Insert new record
-        await SupabaseService.client.from('student_login').insert({
-          'name': studentName,
-          'status': _isPresent,
-          'reason': _isPresent ? null : _absenceReason,
-        });
-      }
+      // Insert new record for absence
+      await SupabaseService.client.from('student_login').insert({
+        'name': studentName,
+        'status': false, // Always absent
+        'reason': _absenceReason,
+      });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Attendance submitted successfully!')),
+          const SnackBar(content: Text('Absence reported successfully!')),
         );
       }
     } catch (e) {
@@ -112,7 +78,6 @@ class _StudentScreenState extends State<StudentScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: ${e.toString()}')),
         );
-        print(e);
       }
     } finally {
       if (mounted) {
@@ -155,51 +120,19 @@ class _StudentScreenState extends State<StudentScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      'Mark Today\'s Attendance',
+                      'Report an Absence',
                       style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 24),
-                    ToggleButtons(
-                      isSelected: [_isPresent, !_isPresent],
-                      onPressed: (index) => setState(() => _isPresent = index == 0),
-                      children: const [
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Row(
-                            children: [
-                              Icon(Icons.check_circle_outline),
-                              SizedBox(width: 8),
-                              Text('Present'),
-                            ],
-                          ),
-                        ),
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Row(
-                            children: [
-                              Icon(Icons.cancel_outlined),
-                              SizedBox(width: 8),
-                              Text('Absent'),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 300),
-                      child: !_isPresent
-                          ? TextField(
-                              key: const ValueKey('reason_field'),
-                              decoration: const InputDecoration(
-                                labelText: 'Reason for Absence',
-                                icon: Icon(Icons.notes),
-                              ),
-                              maxLines: 3,
-                              onChanged: (value) => _absenceReason = value,
-                            )
-                          : const SizedBox(key: ValueKey('empty_sized_box')),
+                    TextField(
+                      key: const ValueKey('reason_field'),
+                      decoration: const InputDecoration(
+                        labelText: 'Reason for Absence',
+                        icon: Icon(Icons.notes),
+                      ),
+                      maxLines: 3,
+                      onChanged: (value) => _absenceReason = value,
                     ),
                     const SizedBox(height: 24),
                     _isLoading

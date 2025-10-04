@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
+import 'package:attendance_pt/screens/create_student_screen.dart';
 import 'login_screen.dart';
 
 class AdminTeacherScreen extends StatefulWidget {
@@ -82,6 +83,16 @@ class _AdminTeacherScreenState extends State<AdminTeacherScreen> {
         currentIndex: _selectedIndex,
         onTap: (index) => setState(() => _selectedIndex = index),
       ),
+      floatingActionButton: _selectedIndex == 0
+          ? FloatingActionButton(
+              onPressed: () {
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (context) => const CreateStudentScreen(),
+                ));
+              },
+              child: const Icon(Icons.add),
+            )
+          : null,
     );
   }
 }
@@ -121,7 +132,8 @@ class _AttendanceManagementScreenState
     try {
       final studentLogins = await SupabaseService.client
           .from('student_login')
-          .select();
+          .select()
+          .order('last_updated', ascending: false);
 
       final combinedData = (studentLogins as List).map((student) {
         return {
@@ -176,128 +188,233 @@ class _AttendanceManagementScreenState
     );
   }
 
+  Future<void> _markAsPresent(String studentName) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Mark as Present'),
+        content: Text('Are you sure you want to mark $studentName as present?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await SupabaseService.client.from('student_login').insert({
+          'name': studentName,
+          'status': true,
+        });
+        _loadStudentData(); // Refresh the data
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error marking present: $e')),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final presentCount = _studentsData
-        .where((s) => s['status'] == 'present')
-        .length;
-    final absentCount = _studentsData
-        .where((s) => s['status'] == 'absent')
-        .length;
-    final totalStudents = _studentsData.length;
-
     return _isLoading
         ? const Center(child: CircularProgressIndicator())
         : RefreshIndicator(
             onRefresh: _loadStudentData,
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  _AttendanceStatsCard(studentsData: _studentsData),
+                  const SizedBox(height: 24),
                   Card(
                     child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
-                        children: [
-                          _buildStat(
-                            'Present',
-                            presentCount.toString(),
-                            Colors.green,
-                          ),
-                          _buildStat(
-                            'Absent',
-                            absentCount.toString(),
-                            Colors.red,
-                          ),
-                          _buildStat(
-                            'Total',
-                            totalStudents.toString(),
-                            Theme.of(context).primaryColor,
-                          ),
-                        ],
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: const InputDecoration(
+                          labelText: 'Search Students',
+                          prefixIcon: Icon(Icons.search),
+                          border: InputBorder.none,
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _searchController,
-                    decoration: const InputDecoration(
-                      labelText: 'Search Students',
-                      prefixIcon: Icon(Icons.search),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Card(
-                    child: DataTable(
-                      columns: const [
-                        DataColumn(label: Text('Name')),
-                        DataColumn(label: Text('Status')),
-                        DataColumn(label: Text('Reason')),
-                      ],
-                      rows: _filteredStudentsData.map((student) {
-                        final status = student['status'] as String?;
-                        final reason = student['reason'] as String?;
-                        return DataRow(
-                          cells: [
-                            DataCell(Text(student['full_name'])),
-                            DataCell(
-                              Text(
-                                status ?? 'Not Marked',
-                                style: TextStyle(
-                                  color: status == 'present'
-                                      ? Colors.green
-                                      : (status == 'absent'
-                                            ? Colors.red
-                                            : null),
-                                ),
-                              ),
-                            ),
-                            DataCell(
-                              IconButton(
-                                icon: const Icon(Icons.info_outline),
-                                onPressed: status == 'absent'
-                                    ? () => _showReasonDialog(reason)
-                                    : null,
-                              ),
-                            ),
-                          ],
-                        );
-                      }).toList(),
-                    ),
+                  const SizedBox(height: 24),
+                  _StudentDataTable(
+                    studentsData: _filteredStudentsData,
+                    onMarkPresent: _markAsPresent,
+                    onShowReason: _showReasonDialog,
                   ),
                 ],
               ),
             ),
           );
   }
+}
 
-  Widget _buildStat(String title, String value, Color color) {
+class _AttendanceStatsCard extends StatelessWidget {
+  final List<Map<String, dynamic>> studentsData;
+
+  const _AttendanceStatsCard({required this.studentsData});
+
+  @override
+  Widget build(BuildContext context) {
+    final presentCount = studentsData.where((s) => s['status'] == 'present').length;
+    final absentCount = studentsData.where((s) => s['status'] == 'absent').length;
+    final totalStudents = studentsData.length;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            Expanded(
+              child: _buildStat(context, 'Present', presentCount.toString(), Colors.green),
+            ),
+            const VerticalDivider(),
+            Expanded(
+              child: _buildStat(context, 'Absent', absentCount.toString(), Colors.red),
+            ),
+            const VerticalDivider(),
+            Expanded(
+              child: _buildStat(context, 'Total', totalStudents.toString(), Theme.of(context).primaryColor),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStat(BuildContext context, String title, String value, Color color) {
     return Column(
       children: [
         Text(
           value,
-          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
+          style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
         ),
-        const SizedBox(height: 4),
-        Text(title),
+        const SizedBox(height: 8),
+        Text(title, style: Theme.of(context).textTheme.titleMedium),
       ],
     );
   }
 }
 
-class AnnouncementScreen extends StatefulWidget {
+class _StudentDataTable extends StatelessWidget {
+  final List<Map<String, dynamic>> studentsData;
+  final void Function(String) onMarkPresent;
+  final void Function(String?) onShowReason;
+
+  const _StudentDataTable({
+    required this.studentsData,
+    required this.onMarkPresent,
+    required this.onShowReason,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          dataRowMinHeight: 60,
+          dataRowMaxHeight: 80,
+          headingRowColor: WidgetStateProperty.resolveWith<Color?>(
+            (states) => Theme.of(context).primaryColor.withAlpha(50),
+          ),
+          columns: const [
+            DataColumn(label: Text('Name')),
+            DataColumn(label: Text('Status')),
+            DataColumn(label: Text('Actions')),
+          ],
+          rows: List.generate(studentsData.length, (index) {
+            final student = studentsData[index];
+            final status = student['status'] as String?;
+            final reason = student['reason'] as String?;
+            final isEven = index.isEven;
+
+            return DataRow(
+              color: WidgetStateProperty.resolveWith<Color?>(
+                (Set<WidgetState> states) {
+                  if (isEven) {
+                    return Colors.grey.withAlpha(25);
+                  }
+                  return null; // Use default value for other states and odd rows.
+                },
+              ),
+              cells: [
+                DataCell(Text(student['full_name'])),
+                DataCell(
+                  Text(
+                    status ?? 'Not Marked',
+                    style: TextStyle(
+                      color: status == 'present'
+                          ? Colors.green
+                          : (status == 'absent' ? Colors.red : null),
+                    ),
+                  ),
+                ),
+                DataCell(
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.check_circle_outline, color: Colors.green),
+                        tooltip: 'Mark Present',
+                        onPressed: () => onMarkPresent(student['full_name']),
+                      ),
+                      if (status == 'absent')
+                        IconButton(
+                          icon: const Icon(Icons.info_outline),
+                          tooltip: 'Show Reason',
+                          onPressed: () => onShowReason(reason),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          }),
+        ),
+      ),
+    );
+  }
+}
+
+class AnnouncementScreen extends StatelessWidget {
   const AnnouncementScreen({super.key});
 
   @override
-  State<AnnouncementScreen> createState() => _AnnouncementScreenState();
+  Widget build(BuildContext context) {
+    return const AudioAnnouncementForm();
+  }
 }
 
-class _AnnouncementScreenState extends State<AnnouncementScreen> {
+
+
+class AudioAnnouncementForm extends StatefulWidget {
+  const AudioAnnouncementForm({super.key});
+
+  @override
+  State<AudioAnnouncementForm> createState() => _AudioAnnouncementFormState();
+}
+
+class _AudioAnnouncementFormState extends State<AudioAnnouncementForm> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   String? _selectedOption;
@@ -354,7 +471,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Post an Announcement',
+                    'Post an Audio Announcement',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -362,7 +479,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                   ),
                   const SizedBox(height: 24),
                   DropdownButtonFormField<String>(
-                    value: _selectedOption,
+                    initialValue: _selectedOption,
                     hint: const Text('Select Category'),
                     items: _options.map((String option) {
                       return DropdownMenuItem<String>(

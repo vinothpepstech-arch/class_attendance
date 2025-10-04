@@ -15,35 +15,37 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
     super.initState();
     // Fetch students when the screen is first loaded
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<StudentLoginProvider>(context, listen: false).fetchStudents();
+      Provider.of<StudentLoginProvider>(context, listen: false).fetchAttendance();
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<StudentLoginProvider>(
-      builder: (context, provider, child) {
-        if (provider.isLoading) {
-          return const Center(child: CircularProgressIndicator());
-        }
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Attendance Log'),
+      ),
+      body: Consumer<StudentLoginProvider>(
+        builder: (context, provider, child) {
+          if (provider.isLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-        return ListView.builder(
-          itemCount: provider.students.length,
-          itemBuilder: (context, index) {
-            final student = provider.students[index];
-            return ListTile(
-              title: Text(student.name),
-              subtitle: Text(student.status ? 'Present' : 'Absent'),
-              trailing: Switch(
-                value: student.status,
-                onChanged: (newStatus) {
-                  provider.updateStudentStatus(student.id, newStatus);
-                },
-              ),
-            );
-          },
-        );
-      },
+          return ListView.builder(
+            itemCount: provider.students.length,
+            itemBuilder: (context, index) {
+              final student = provider.students[index];
+              return ListTile(
+                title: Text(student.name),
+                subtitle: Text('${student.status ? 'Present' : 'Absent'} at ${student.lastUpdated}'),
+                trailing: student.status
+                    ? const Icon(Icons.check_circle, color: Colors.green)
+                    : const Icon(Icons.cancel, color: Colors.red),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }

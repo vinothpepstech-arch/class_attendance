@@ -1,54 +1,42 @@
-# App Blueprint
+# Project Blueprint
 
 ## Overview
 
-This document outlines the project structure, features, and design of a Flutter-based School Management application. The app provides role-based access for Admins, Teachers, and Students, integrating with Supabase for backend services, including authentication and database management.
+This document outlines the structure, features, and implementation plan for the `attendance_PT` application. The application is a Flutter-based mobile app for managing student attendance, with separate interfaces for students and administrators.
 
-## Key Features
+## Implemented Features
 
-### 1. User Roles & Authentication
-- **Three Roles:** The app supports `admin`, `teacher`, and `student` roles.
-- **Authentication:** Users log in with their email and password. The app fetches their role from the `profiles` table in Supabase to determine which dashboard to display.
-- **State Management:** The user's authentication state and role are managed globally using the `provider` package.
+*   User authentication with email and password using Supabase.
+*   Role-based access control for students and admins/teachers.
+*   A theme provider for toggling between light and dark modes.
+*   A student dashboard to view announcements and mark attendance.
+*   An admin dashboard to view student attendance statistics, search for students, and manage announcements.
 
-### 2. Student Dashboard (`StudentScreen`)
-- **Attendance Marking:**
-  - Students can mark their own attendance for the current day as either 'Present' or 'Absent'.
-  - If a student marks themselves as 'Absent', they are required to provide a reason.
-  - The attendance data is saved to the `attendance` table, uniquely identified by the student's ID and the date.
-- **View Announcements:**
-  - Students can view a list of the latest announcements posted by admins or teachers, ensuring they stay informed about school-wide updates.
+## Planned Changes
 
-### 3. Admin/Teacher Dashboard (`AdminTeacherScreen`)
-- **Modern Navigation:** The dashboard uses a clean, icon-driven `BottomNavigationBar` to switch between two main sections:
-  - Attendance Management
-  - Announcements
-- **Attendance Management:**
-  - **Visual Summary:** Displays a dynamic and visually appealing summary of the total number of present and absent students for the current day in prominent cards.
-  - **Student List:** Shows a list of all students with their current attendance status clearly marked with colors (green for present, red for absent).
-  - **Update Attendance:** Allows the admin/teacher to quickly update the attendance status ('Present' or 'Absent') for each student.
-  - **View Absence Reason:** If a student is marked absent, tapping on their name will open a dialog box displaying the reason they provided.
-- **Announcements & Instructions:**
-  - **Create Announcements:** Provides an intuitive interface with predefined announcement types (e.g., 'Assemble', 'Dismissal') and a text field for custom messages.
-  - **Post Announcements:** Allows the admin/teacher to post announcements that become immediately visible to all students.
-  - **View Past Announcements:** Displays a list of previously sent announcements for reference.
+1.  **Rename Application**: Change the application name from `myapp` to `attendance_PT`.
+2.  **Modify Student Screen**:
+    *   Remove the "Present" button from the student attendance screen.
+    *   Students will only be able to mark themselves as "Absent" and provide a reason.
+    *   Each time a student marks themselves as absent, a new row will be inserted into the `student_login` table.
+3.  **Modify Admin Screen**:
+    *   Add a feature for administrators to mark a student as "Present".
+    *   This action will insert a new row into the `student_login` table with the student's name and a "present" status.
+4.  **Database Interaction**:
+    *   Modify the database logic to insert a new row for each attendance event (present or absent) instead of updating existing records.
 
-## Architecture & Design
+## File-by-File Implementation Plan
 
-### UI/UX Principles
-- **Modern Aesthetics:** The app uses a modern, clean, and visually balanced design based on Material Design 3.
-- **Cool & Smooth UI:** Incorporates smooth animations, a vibrant color scheme derived from a seed color, and custom `Google Fonts` typography for a premium user experience.
-- **Responsive Design:** All screens are fully responsive and adapt gracefully to different screen sizes, ensuring a consistent experience on both mobile and web platforms.
-- **Intuitive Components:** Utilizes clear iconography, well-spaced layouts, and interactive elements like cards and chips to make navigation and interaction effortless.
-
-### Technical Stack
-- **Framework:** Flutter
-- **Backend:** Supabase (Authentication & PostgreSQL Database)
-- **State Management:** Provider
-- **UI Toolkit:** Material Design 3
-- **Typography:** google_fonts
-
-### Database Schema
-- **`profiles`**: Stores user information, including `full_name` and `role`, linked to `auth.users`.
-- **`attendance`**: Records daily attendance for each student, including `status` and `reason` for absence.
-- **`announcements`**: Stores all announcements with a `title`, `content`, and `created_at` timestamp.
+*   **`pubspec.yaml`**:
+    *   Change the `name` attribute from `myapp` to `attendance_PT`.
+*   **`lib/screens/student_screen.dart`**:
+    *   Remove the `ToggleButtons` for selecting "Present" or "Absent".
+    *   The UI will default to marking the student as "Absent".
+    *   The `_submitAttendance` function will be updated to always set the `status` to `false` (absent) and insert a new record.
+*   **`lib/screens/admin_teacher_screen.dart`**:
+    *   In the `AttendanceManagementScreen`, add a button or action to mark a student as "Present".
+    *   Implement a function to handle this action, which will insert a new record into the `student_login` table with the `status` set to `true` (present).
+*   **`lib/providers/student_login_provider.dart`**:
+    *   Remove the `updateStudentStatus` function.
+    *   Add a new function, `addStudentAttendance`, to insert a new attendance record.
+    *   The `fetchStudents` function will need to be updated to correctly display the latest status for each student, since there can now be multiple records for each student. A possible approach is to fetch the most recent record for each student.

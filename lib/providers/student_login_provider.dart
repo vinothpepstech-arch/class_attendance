@@ -34,37 +34,29 @@ class StudentLoginProvider with ChangeNotifier {
   List<StudentLogin> _students = [];
   List<StudentLogin> get students => _students;
 
-  Future<void> fetchStudents() async {
+  Future<void> fetchAttendance() async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      final data = await SupabaseService.client.from('student_login').select();
+      final data = await SupabaseService.client.from('student_login').select().order('last_updated', ascending: false);
       _students = data.map((item) => StudentLogin.fromMap(item)).toList();
     } catch (e) {
       // Handle error
-      print(e);
     }
-
-    _isLoading = false;
     notifyListeners();
   }
 
-  Future<void> updateStudentStatus(int id, bool status) async {
+  Future<void> addStudentAttendance(String name, bool status, {String? reason}) async {
     try {
-      await SupabaseService.client
-          .from('student_login')
-          .update({'status': status, 'last_updated': DateTime.now().toIso8601String()})
-          .eq('id', id);
-
-      final index = _students.indexWhere((student) => student.id == id);
-      if (index != -1) {
-        _students[index].status = status;
-        notifyListeners();
-      }
+      await SupabaseService.client.from('student_login').insert({
+        'name': name,
+        'status': status,
+        'reason': reason,
+      });
+      fetchAttendance(); // Refresh the list
     } catch (e) {
       // Handle error
-      print(e);
     }
   }
 }

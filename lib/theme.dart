@@ -75,7 +75,7 @@ class AppTheme {
     ),
     toggleButtonsTheme: ToggleButtonsThemeData(
       borderRadius: BorderRadius.circular(8),
-      fillColor: Colors.deepPurple.withOpacity(0.1),
+      fillColor: Colors.deepPurple.withAlpha(25),
       selectedColor: Colors.deepPurple,
       textStyle: GoogleFonts.poppins(),
     ),
@@ -146,7 +146,7 @@ class AppTheme {
     ),
     toggleButtonsTheme: ToggleButtonsThemeData(
       borderRadius: BorderRadius.circular(8),
-      fillColor: Colors.deepPurple.withOpacity(0.2),
+      fillColor: Colors.deepPurple.withAlpha(51),
       selectedColor: Colors.white,
       textStyle: GoogleFonts.poppins(),
     ),
